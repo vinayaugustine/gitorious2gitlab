@@ -104,9 +104,14 @@ class Repository(Base):
     id = Column(Integer, primary_key=True)
     description = Column(String)
     name = Column(String)
+    hashed_path = Column(String)
+
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
+    owner_id = Column(Integer)
+    owner_type = Column(String)
 
+    parent_id = Column(Integer, ForeignKey('repositories.id'))
     project_id = Column(Integer, ForeignKey('projects.id'))
     project = relationship('Project', back_populates='repositories')
 
