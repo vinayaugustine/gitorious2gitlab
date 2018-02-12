@@ -75,6 +75,18 @@ class Group(Base):
 User.owned_groups = relationship('Group', back_populates='admin')
 
 
+taggings = Table('taggings', Base.metadata,
+    Column('id', Integer, primary_key=True),
+    Column('tag_id', Integer, ForeignKey('tags.id')),
+    Column('taggable_id', Integer, ForeignKey('projects.id'))
+)
+
+class Tag(Base):
+    __tablename__ = 'tags'
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+
+
 class Project(Base):
     __tablename__ = 'projects'
     id = Column(Integer, primary_key=True)
@@ -103,6 +115,8 @@ class Project(Base):
     wiki_enabled = Column(Integer)
     site_id = Column(Integer, ForeignKey('sites.id'))
     site = relationship('Site')
+
+    tags = relationship('Tag', secondary=taggings)
 
 User.projects = relationship('Project', back_populates='user')
 
