@@ -13,6 +13,22 @@ def setup_session(path_to_db):
     return Session()
 
 
+group_memberships = Table('memberships', Base.metadata,
+    Column('id', Integer, primary_key=True),
+    Column('group_id', Integer, ForeignKey('groups.id')),
+    Column('user_id', Integer, ForeignKey('users.id')),
+    Column('role_id', Integer, ForeignKey('roles.id'))
+)
+
+class Role(Base):
+    __tablename__ = 'roles'
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    kind = Column(Integer)
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
+
+
 class User(Base):
     __tablename__ = 'users'
 
@@ -21,11 +37,31 @@ class User(Base):
     email = Column(String)
     fullname = Column(String)
 
+    groups = relationship('Group', secondary=group_memberships)
+
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
 
     def __str__(self):
         return '{} <{}>'.format(self.fullname, self.email)
+
+
+class Group(Base):
+    __tablename__ = 'groups'
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    description = Column(String)
+
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
+
+    user_id = Column(Integer, ForeignKey('users.id'))
+    admin = relationship('User', back_populates='owned_groups')
+
+    members = relationship('User', secondary=group_memberships)
+
+User.owned_groups = relationship('Group', back_populates='admin')
+
 
 class Project(Base):
     __tablename__ = 'projects'
