@@ -124,3 +124,17 @@ class Repository(Base):
 
 Project.repositories = relationship('Repository', back_populates='project')
 User.repositories = relationship('Repository', back_populates='user')
+
+
+class SshKey(Base):
+    __tablename__ = 'ssh_keys'
+    id = Column(Integer, primary_key=True)
+    key = Column(String)
+
+    user_id = Column(Integer, ForeignKey('users.id'))
+    user = relationship('User', back_populates='ssh_keys')
+
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
+
+User.ssh_keys = relationship('SshKey', back_populates='user')
