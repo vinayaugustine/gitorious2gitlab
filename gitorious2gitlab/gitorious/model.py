@@ -46,6 +46,18 @@ class User(Base):
         return '{} <{}>'.format(self.fullname, self.email)
 
 
+class Site(Base):
+    __tablename__ = 'sites'
+    id = Column(Integer, primary_key=True)
+    title = Column(String)
+    subdomain = Column(String)
+    
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
+
+    wiki_git_path = Column(String)
+
+
 class Group(Base):
     __tablename__ = 'groups'
     id = Column(Integer, primary_key=True)
@@ -81,7 +93,9 @@ class Project(Base):
     user_id = Column(Integer, ForeignKey('users.id'))
     user = relationship('User', back_populates='projects')
 
-    wiki_enabled = Column(String)
+    wiki_enabled = Column(Integer)
+    site_id = Column(Integer, ForeignKey('sites.id'))
+    site = relationship('Site')
 
 User.projects = relationship('Project', back_populates='user')
 
