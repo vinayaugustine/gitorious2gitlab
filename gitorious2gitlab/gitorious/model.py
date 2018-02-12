@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine, ForeignKey
-from sqlalchemy.orm import backref, relationship, sessionmaker
+from sqlalchemy.orm import backref, relationship, sessionmaker, object_session
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, DateTime, Integer, String, Table
@@ -82,8 +82,15 @@ class Project(Base):
     description = Column(String)
     home_url = Column(String)
     mailinglist_url = Column(String)
+
     owner_id = Column(Integer)
     owner_type = Column(String)
+
+    @property
+    def owner(self):
+        target = globals()[self.owner_type]
+        return object_session(self).query(target).filter(target.id == self.owner_id).one_or_none()
+
     slug = Column(String)
     title = Column(String)
     
