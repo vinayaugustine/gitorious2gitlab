@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine, ForeignKey
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import backref, relationship, sessionmaker
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, DateTime, Integer, String, Table
@@ -112,6 +112,8 @@ class Repository(Base):
     owner_type = Column(String)
 
     parent_id = Column(Integer, ForeignKey('repositories.id'))
+    children = relationship('Repository', backref=backref('parent', remote_side=[id]))
+
     project_id = Column(Integer, ForeignKey('projects.id'))
     project = relationship('Project', back_populates='repositories')
 
