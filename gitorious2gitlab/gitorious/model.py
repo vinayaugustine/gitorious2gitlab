@@ -2,7 +2,7 @@ from sqlalchemy import create_engine, ForeignKey
 from sqlalchemy.orm import relationship, sessionmaker
 
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, DateTime, Integer, String, Table
 
 Base = declarative_base()
 
@@ -21,6 +21,9 @@ class User(Base):
     email = Column(String)
     fullname = Column(String)
 
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
+
     def __str__(self):
         return '{} <{}>'.format(self.fullname, self.email)
 
@@ -36,6 +39,9 @@ class Project(Base):
     slug = Column(String)
     title = Column(String)
     
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
+
     user_id = Column(Integer, ForeignKey('users.id'))
     user = relationship('User', back_populates='projects')
 
@@ -48,6 +54,8 @@ class Repository(Base):
     id = Column(Integer, primary_key=True)
     description = Column(String)
     name = Column(String)
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
 
     project_id = Column(Integer, ForeignKey('projects.id'))
     project = relationship('Project', back_populates='repositories')
