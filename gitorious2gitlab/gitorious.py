@@ -87,6 +87,7 @@ class Tag(Base):
     name = Column(String)
 
 
+
 class Project(Base):
     __tablename__ = 'projects'
     id = Column(Integer, primary_key=True)
@@ -144,7 +145,7 @@ class Repository(Base):
     wiki_permissions = Column(Integer)
 
     def clone_url(self, server_url):
-        return 'git@{}:{}.git'.format(server_url, self.hashed_path)
+        return 'git://{}:{}.git'.format(server_url, self.hashed_path)
 
 Project.repositories = relationship('Repository', back_populates='project')
 User.repositories = relationship('Repository', back_populates='user')
