@@ -42,6 +42,9 @@ class User(Base):
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
 
+    def __repr__(self):
+        return 'User(login={})'.format(self.login)
+
     def __str__(self):
         return '{} <{}>'.format(self.fullname, self.email)
 
@@ -72,6 +75,9 @@ class Group(Base):
 
     members = relationship('User', secondary=group_memberships)
 
+    def __repr__(self):
+        return 'Group(name={}, admin={})'.format(self.name, repr(self.admin))
+
 User.owned_groups = relationship('Group', back_populates='admin')
 
 
@@ -86,6 +92,8 @@ class Tag(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String)
 
+    def __repr__(self):
+        return 'Tag({})'.format(self.name)
 
 
 class Project(Base):
@@ -119,6 +127,9 @@ class Project(Base):
 
     tags = relationship('Tag', secondary=taggings)
 
+    def __repr__(self):
+        return 'Project(slug={}, owner={})'.format(self.slug, repr(self.owner))
+
 User.projects = relationship('Project', back_populates='user')
 
 class Repository(Base):
@@ -146,6 +157,9 @@ class Repository(Base):
 
     def clone_url(self, server_url):
         return 'git://{}:{}.git'.format(server_url, self.hashed_path)
+
+    def __repr__(self):
+        return 'Repository(path={}, name={}, project={})'.format(self.hashed_path, self.name, repr(self.project))
 
 Project.repositories = relationship('Repository', back_populates='project')
 User.repositories = relationship('Repository', back_populates='user')
