@@ -1,12 +1,17 @@
+import os
+import os.path as path
 import random
 import string
+import urllib3
 
 from collections import defaultdict, namedtuple, OrderedDict
+from urllib.parse import urlparse, ParseResult
+
 import gitlab
-import pygit2
+import git
+
 import gitorious2gitlab.gitorious as gitorious
 
-import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class RepositoryGroup(namedtuple('ParsedRepos', 'project_repo, wiki_repo, forks')):
@@ -30,6 +35,7 @@ class ImportSession(object):
         self._gitlab = gitlab.Gitlab(gitlab_url, private_token=gitlab_token, api_version=4, ssl_verify=False)
 
         self.users = OrderedDict()
+        self.gl_tokens = dict()
     
     @property
     def gitorious(self):
@@ -50,6 +56,42 @@ class ImportSession(object):
             print('{} {}in gitlab'.format(username, '' if username in gitlab_users else 'not '))
             self.users[user] = gitlab_users[username] if username in gitlab_users else None
 
+    def mirror(self, gitorious_repository, gitlab_project):
+        try:
+            if gitlab_project.namespace['kind'] == 'user':
+                gl_owner = self.gitlab.users.get(gitlab_project.owner['id'])
+            else: # kind is group
+                group = self.gitlab.groups.get(gitlab_project.namespace['id'])
+                gl_owner = [self.gitlab.users.get(m.id) for m in group.members.list(access_level=gitlab.OWNER_ACCESS, all=True) if m.id > 1][0]
+            
+            if gl_owner not in self.gl_tokens:
+                self.gl_tokens[gl_owner] = gl_owner.impersonationtokens.create({
+                    'name': 'import token',
+                    'scopes': ['api', 'read_user']
+                })
+            
+            repo_path = path.join('exported_repositories', gitlab_project.namespace['path'], gitlab_project.path)
+            os.makedirs(repo_path)
+            repo = git.Repo.clone_from(gitorious_repository.clone_url(self.gitorious_url), repo_path, bare=True)
+
+            with repo.config_writer() as cw:
+                cw.add_section('http')
+                cw.set('http', 'proxy', '')
+                cw.set('http', 'sslVerify', False)
+            
+            remote = repo.create_remote('gitlab', gitlab_project.http_url_to_repo)
+
+            parsed_url = urlparse(gitlab_project.http_url_to_repo)._asdict()
+            parsed_url['netloc'] = 'gitlab-ci-token:{}@{}'.format(self.gl_tokens[gl_owner].token, parsed_url['netloc'])
+            push_url = ParseResult(**parsed_url).geturl()
+
+            with remote.config_writer as cw:
+                cw.set('pushurl', push_url)
+                cw.set('mirror', True)
+            
+            remote.push()
+        finally:
+            pass
     def create_users(self):
         self.map_existing_users()
         for user in self.users:
@@ -89,7 +131,7 @@ class ImportSession(object):
             'tag_list': [t.name for t in repo_group.project_repo.project.tags]
         })
         gl_project = gitlab_project_root.create(kwargs)
-        # TODO clone repo
+        self.mirror(repo_group.project_repo, gl_project)
         # TODO clone wiki repo
 
         for fork in repo_group.forks:
@@ -99,8 +141,10 @@ class ImportSession(object):
                 'description':  None if fork.description is None else fork.description[0:255],
                 'wiki_enabled': False
             })
-            # TODO create fork relation
-            # TODO clone repo
+            fork_project = self.gitlab.projects.get(gl_fork.id)
+            fork_project.create_fork_relation(gl_project.id)
+
+            self.mirror(fork, gl_fork)
         return gl_project
 
     def create_group(self, project):
