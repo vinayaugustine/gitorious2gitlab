@@ -29,7 +29,7 @@ def randomword(length):
     return ''.join(random.choice(string.ascii_letters) for i in range(length))
 
 class ImportSession(object):
-    def __init__(self, gitorious_db_conn, gitorious_url, gitlab_url, gitlab_token, username_formatter=str.upper):
+    def __init__(self, gitorious_db_conn, gitorious_url, gitlab_url, gitlab_token, username_formatter=str):
         self._gitorious_session = gitorious.setup_session(gitorious_db_conn)
         self._gitorious_url = gitorious_url
         self._gitlab = gitlab.Gitlab(gitlab_url, private_token=gitlab_token, api_version=4, ssl_verify=False)
