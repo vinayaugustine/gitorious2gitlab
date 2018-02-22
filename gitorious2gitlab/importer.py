@@ -29,11 +29,11 @@ def randomword(length):
     return ''.join(random.choice(string.ascii_letters) for i in range(length))
 
 class ImportSession(object):
-    def __init__(self, gitorious_db_conn, gitorious_url, gitlab_url, gitlab_token):
+    def __init__(self, gitorious_db_conn, gitorious_url, gitlab_url, gitlab_token, username_formatter=str.upper):
         self._gitorious_session = gitorious.setup_session(gitorious_db_conn)
         self._gitorious_url = gitorious_url
         self._gitlab = gitlab.Gitlab(gitlab_url, private_token=gitlab_token, api_version=4, ssl_verify=False)
-
+        self.format_username = username_formatter
         self.users = OrderedDict()
         self.gl_tokens = dict()
     
@@ -49,7 +49,7 @@ class ImportSession(object):
         return self._gitlab
     
     def map_existing_users(self):
-        gitorious_users = dict((u.login.upper(), u) for u in self.gitorious.query(gitorious.User))
+        gitorious_users = dict((self.format_username(u.login), u) for u in self.gitorious.query(gitorious.User))
         gitlab_users = dict((u.username, u) for u in self.gitlab.users.list(all=True))
 
         for username, user in gitorious_users.items():
@@ -102,7 +102,7 @@ class ImportSession(object):
                 print(user)
                 self.users[user] = self.gitlab.users.create({
                     'email': user.email,
-                    'username': user.login.upper(),
+                    'username': self.format_username(user.login),
                     'name': user.fullname,
                     'password': randomword(12),
                     'skip_confirmation': True
