@@ -127,24 +127,16 @@ class ImportSession(object):
         return ParseResult(**parsed_url).geturl()
 
     def mirror(self, gitorious_repository, gitlab_project):
-        if gitlab_project.namespace['kind'] == 'user':
-            gl_owner = self.gitlab.users.get(gitlab_project.owner['id'])
-        else: # kind is group
-            group = self.gitlab.groups.get(gitlab_project.namespace['id'])
-            gl_owner = [self.gitlab.users.get(m.id) for m in group.members.list(access_level=gitlab.OWNER_ACCESS, all=True) if m.id > 1][0]
-        
-        if gl_owner not in self.gl_tokens:
-            self.gl_tokens[gl_owner] = gl_owner.impersonationtokens.create({
-                'name': 'import token',
-                'scopes': ['api', 'read_user']
-            })
-        
         repo_path = path.join('exported_repositories', gitlab_project.namespace['path'], gitlab_project.path)
-        repo = Repository(gitorious_repository.clone_url(self.gitorious_url), repo_path)
+        push_url = self.make_authenticated_url(gitlab_project.http_url_to_repo, self.token(gitlab_project))
+        
+        self.mirror_repository(repo_path, gitorious_repository.clone_url(self.gitorious_url), push_url)
+        
+    def mirror_repository(self, local_path, source_url, target_url):
+        repo = Repository(source_url, local_path)
         repo.configure('http', proxy='', sslVerify=False)
 
-        push_url = self.make_authenticated_url(gitlab_project.http_url_to_repo, self.gl_tokens[gl_owner].token)
-        repo.mirror('gitlab', push_url)
+        repo.mirror('gitlab', target_url)
         
     def create_users(self):
         self.map_existing_users()
@@ -268,10 +260,14 @@ class ImportSession(object):
             self.cleanup()
         return self.migrate_projects()
 
-    def _remove_gl(self, object_name):
-        glo = getattr(self.gl, object_name)
-        for obj in glo.list(all=True):
-            glo.delete(obj.id)owner].token
+    def token(self, project: gitlab.Project) -> str:
+        owner = self._get_project_owner(project)
+        if owner not in self.gl_tokens:
+            self.gl_tokens[owner] = owner.impersonationtokens.create({
+                'name': 'import token',
+                'scopes': ['api', 'read_user']
+            })
+        return self.gl_tokens[owner].token
     
     def _get_project_owner(self, project: gitlab.Project) -> gitlab.User:
         if project.namespace['kind'] == 'user':
