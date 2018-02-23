@@ -123,25 +123,25 @@ class ImportSession(object):
         return ParseResult(**parsed_url).geturl()
 
     def mirror(self, gitorious_repository, gitlab_project):
-            if gitlab_project.namespace['kind'] == 'user':
-                gl_owner = self.gitlab.users.get(gitlab_project.owner['id'])
-            else: # kind is group
-                group = self.gitlab.groups.get(gitlab_project.namespace['id'])
-                gl_owner = [self.gitlab.users.get(m.id) for m in group.members.list(access_level=gitlab.OWNER_ACCESS, all=True) if m.id > 1][0]
-            
-            if gl_owner not in self.gl_tokens:
-                self.gl_tokens[gl_owner] = gl_owner.impersonationtokens.create({
-                    'name': 'import token',
-                    'scopes': ['api', 'read_user']
-                })
-            
-            repo_path = path.join('exported_repositories', gitlab_project.namespace['path'], gitlab_project.path)
+        if gitlab_project.namespace['kind'] == 'user':
+            gl_owner = self.gitlab.users.get(gitlab_project.owner['id'])
+        else: # kind is group
+            group = self.gitlab.groups.get(gitlab_project.namespace['id'])
+            gl_owner = [self.gitlab.users.get(m.id) for m in group.members.list(access_level=gitlab.OWNER_ACCESS, all=True) if m.id > 1][0]
+        
+        if gl_owner not in self.gl_tokens:
+            self.gl_tokens[gl_owner] = gl_owner.impersonationtokens.create({
+                'name': 'import token',
+                'scopes': ['api', 'read_user']
+            })
+        
+        repo_path = path.join('exported_repositories', gitlab_project.namespace['path'], gitlab_project.path)
         repo = Repository(gitorious_repository.clone_url(self.gitorious_url), repo_path)
         repo.configure('http', proxy='', sslVerify=False)
 
         push_url = self.make_authenticated_url(gitlab_project.http_url_to_repo, self.gl_tokens[gl_owner].token)
         repo.mirror('gitlab', push_url)
-            
+        
     def create_users(self):
         self.map_existing_users()
         for user in self.users:
@@ -221,22 +221,22 @@ class ImportSession(object):
         for project in self.gitorious.query(gitorious.Project):
             try:
                 print(repr(project))
-            repo_groups = list(RepositoryGroup.from_project(project))
-            if type(project.owner) is gitorious.User and len(repo_groups) == 1:
+                repo_groups = list(RepositoryGroup.from_project(project))
+                if type(project.owner) is gitorious.User and len(repo_groups) == 1:
                     print('\t{} {} {} forks'.format(repo_groups[0].project_repo.hashed_path,
                         'NO WIKI' if repo_groups[0].wiki_repo is None else repo_groups[0].wiki_repo.hashed_path,
                         len(repo_groups[0].forks)))
-                gitlab_user = self.users[project.owner]
-                self.create_project(repo_groups[0], gitlab_user.projects)
-            else: # create a group
-                # 1. create parent group
-                gitlab_group = self.create_group(project)
-                
-                for repository in repo_groups:
+                    gitlab_user = self.users[project.owner]
+                    self.create_project(repo_groups[0], gitlab_user.projects)
+                else: # create a group
+                    # 1. create parent group
+                    gitlab_group = self.create_group(project)
+                    
+                    for repository in repo_groups:
                         print('\t{} {} {} forks'.format(repository.project_repo.hashed_path,
                                                 'NO WIKI' if repository.wiki_repo is None else repository.wiki_repo.hashed_path,
                                                 len(repository.forks)))
-                    self.create_project(repository, self.gitlab.projects, namespace_id=gitlab_group.id)
+                        self.create_project(repository, self.gitlab.projects, namespace_id=gitlab_group.id)
             except Exception as ex:
                 print('ERROR: ' + repr(project) + str(ex))
                 unmigrated_projects.append((project, ex))
@@ -257,6 +257,12 @@ class ImportSession(object):
         for obj in filter(lambda x: x.id > 1, self.gitlab.users.list(all=True)):
             self.gitlab.users.delete(obj.id)
     
+    def run(self, cleanup=False):
+        self.create_users()
+        if cleanup:
+            self.cleanup()
+        self.migrate_projects()
+
     def _remove_gl(self, object_name):
         glo = getattr(self.gitlab, object_name)
         for obj in glo.list(all=True):
