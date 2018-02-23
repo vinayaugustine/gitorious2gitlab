@@ -117,7 +117,6 @@ class ImportSession(object):
         gitlab_users = dict((u.username, u) for u in self.gl.users.list(all=True))
 
         for username, user in gitorious_users.items():
-            print('{} {}in gitlab'.format(username, '' if username in gitlab_users else 'not '))
             self.users[user] = gitlab_users[username] if username in gitlab_users else None
 
     def make_authenticated_url(self, repo_url, token, username='gitlab-ci-token'):
