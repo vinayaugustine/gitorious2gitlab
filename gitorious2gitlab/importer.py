@@ -14,6 +14,50 @@ import gitorious2gitlab.gitorious as gitorious
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+class Repository(object):
+    def __init__(self, origin_url, local_path):
+        self._origin_url = origin_url
+        self._path = local_path
+        self._create_repo()
+
+    @property
+    def repository(self):
+        return self._repo
+
+    def update(self):
+        self.repository.remotes['origin'].fetch('+refs/heads/*:refs/heads/*')
+
+    def _create_repo(self):
+        try:
+            self._repo = git.Repo(self._path)
+        except:
+            if not path.exists(self._path):
+                os.makedirs(self._path)
+            self._repo = git.Repo.clone_from(self._origin_url, self._path, bare=True)
+    
+    def configure(self, section, **kwargs):
+        section_exists = False
+        with self.repository.config_reader() as r:
+            section_exists = r.has_section(section)
+        
+        with self.repository.config_writer() as cw:
+            if not section_exists:
+                cw.add_section(section)
+            for (prop,value) in kwargs.items():
+                cw.set(section, prop, value)
+
+    def mirror(self, remote_name, remote_url):
+        try:
+            remote = self.repository.remotes[remote_name]
+        except IndexError:
+            remote = self.repository.create_remote(remote_name, remote_url)
+        
+        with remote.config_writer as cw:
+            cw.set('pushurl', remote_url)
+            cw.set('mirror', True)
+        
+        remote.push()
+
 class RepositoryGroup(namedtuple('ParsedRepos', 'project_repo, wiki_repo, forks')):
     @staticmethod
     def from_project(gitorious_project: gitorious.Project):
@@ -72,8 +116,13 @@ class ImportSession(object):
             print('{} {}in gitlab'.format(username, '' if username in gitlab_users else 'not '))
             self.users[user] = gitlab_users[username] if username in gitlab_users else None
 
+    def make_authenticated_url(self, repo_url, token, username='gitlab-ci-token'):
+        parsed_url = urlparse(repo_url)._asdict()
+        parsed_url['netloc'] = '{}:{}@{}'.format(username, token, parsed_url['netloc'])
+
+        return ParseResult(**parsed_url).geturl()
+
     def mirror(self, gitorious_repository, gitlab_project):
-        try:
             if gitlab_project.namespace['kind'] == 'user':
                 gl_owner = self.gitlab.users.get(gitlab_project.owner['id'])
             else: # kind is group
@@ -87,27 +136,12 @@ class ImportSession(object):
                 })
             
             repo_path = path.join('exported_repositories', gitlab_project.namespace['path'], gitlab_project.path)
-            os.makedirs(repo_path)
-            repo = git.Repo.clone_from(gitorious_repository.clone_url(self.gitorious_url), repo_path, bare=True)
+        repo = Repository(gitorious_repository.clone_url(self.gitorious_url), repo_path)
+        repo.configure('http', proxy='', sslVerify=False)
 
-            with repo.config_writer() as cw:
-                cw.add_section('http')
-                cw.set('http', 'proxy', '')
-                cw.set('http', 'sslVerify', False)
+        push_url = self.make_authenticated_url(gitlab_project.http_url_to_repo, self.gl_tokens[gl_owner].token)
+        repo.mirror('gitlab', push_url)
             
-            remote = repo.create_remote('gitlab', gitlab_project.http_url_to_repo)
-
-            parsed_url = urlparse(gitlab_project.http_url_to_repo)._asdict()
-            parsed_url['netloc'] = 'gitlab-ci-token:{}@{}'.format(self.gl_tokens[gl_owner].token, parsed_url['netloc'])
-            push_url = ParseResult(**parsed_url).geturl()
-
-            with remote.config_writer as cw:
-                cw.set('pushurl', push_url)
-                cw.set('mirror', True)
-            
-            remote.push()
-        finally:
-            pass
     def create_users(self):
         self.map_existing_users()
         for user in self.users:
