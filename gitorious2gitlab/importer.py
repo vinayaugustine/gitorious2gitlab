@@ -119,24 +119,27 @@ class ImportSession(object):
         for username, user in gitorious_users.items():
             self.users[user] = gitlab_users[username] if username in gitlab_users else None
 
+    def wiki_url_for_project(self, project: gitlab.Project, include_auth=True) -> str:
+        url = project.http_url_to_repo[0:-3] + 'wiki.git'
+        if include_auth:
+            return self.make_authenticated_url(url, self.token(project))
+        return url
+
     def make_authenticated_url(self, repo_url, token, username='gitlab-ci-token'):
         parsed_url = urlparse(repo_url)._asdict()
         parsed_url['netloc'] = '{}:{}@{}'.format(username, token, parsed_url['netloc'])
 
         return ParseResult(**parsed_url).geturl()
 
-    def mirror(self, gitorious_repository, gitlab_project):
-        repo_path = path.join('exported_repositories', gitlab_project.namespace['path'], gitlab_project.path)
-        push_url = self.make_authenticated_url(gitlab_project.http_url_to_repo, self.token(gitlab_project))
-        
-        self.mirror_repository(repo_path, gitorious_repository.clone_url(self.gitorious_url), push_url)
-        
-    def mirror_repository(self, local_path, source_url, target_url):
+    def make_local_path(self, project: gitlab.Project):
+        return path.join('exported_repositories', project.namespace['path'], project.path)
+    
+    def mirror(self, local_path, source_url, target_url):
         repo = Repository(source_url, local_path)
         repo.configure('http', proxy='', sslVerify=False)
 
         repo.mirror('gitlab', target_url)
-        
+    
     def create_users(self):
         self.map_existing_users()
         for user in self.users:
@@ -176,8 +179,17 @@ class ImportSession(object):
             'tag_list': [t.name for t in repo_group.project_repo.project.tags]
         })
         gl_project = gitlab_project_root.create(kwargs)
-        self.mirror(repo_group.project_repo, gl_project)
-        # TODO clone wiki repo
+
+        # migrate the project repo
+        self.mirror(self.make_local_path(gl_project),
+                    repo_group.project_repo.clone_url(self.gitorious_url),
+                               self.make_authenticated_url(gl_project.http_url_to_repo, self.token(gl_project)))
+
+        # migrate the wiki
+        if repo_group.wiki_repo is not None:
+            self.mirror(self.make_local_path(gl_project) + '.wiki',
+                        repo_group.wiki_repo.clone_url(self.gitorious_url),
+                        self.wiki_url_for_project(gl_project))
 
         for fork in repo_group.forks:
             gl_fork = self.users[fork.user].projects.create({
@@ -189,7 +201,9 @@ class ImportSession(object):
             fork_project = self.gl.projects.get(gl_fork.id)
             fork_project.create_fork_relation(gl_project.id)
 
-            self.mirror(fork, gl_fork)
+            self.mirror(self.make_local_path(fork_project),
+                        fork.clone_url(self.gitorious_url),
+                        self.make_authenticated_url(fork_project.http_url_to_repo, self.token(fork_project)))
         return gl_project
 
     def create_group(self, project):
