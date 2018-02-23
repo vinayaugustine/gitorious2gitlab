@@ -104,13 +104,14 @@ class ImportSession(object):
     @property
     def gitorious_url(self):
         return self._gitorious_url
+    
     @property
-    def gitlab(self):
+    def gl(self):
         return self._gitlab
     
     def map_existing_users(self):
         gitorious_users = dict((self.format_username(u.login), u) for u in self.gitorious.query(gitorious.User))
-        gitlab_users = dict((u.username, u) for u in self.gitlab.users.list(all=True))
+        gitlab_users = dict((u.username, u) for u in self.gl.users.list(all=True))
 
         for username, user in gitorious_users.items():
             print('{} {}in gitlab'.format(username, '' if username in gitlab_users else 'not '))
@@ -150,7 +151,7 @@ class ImportSession(object):
                 continue
             try:
                 print(user)
-                self.users[user] = self.gitlab.users.create({
+                self.users[user] = self.gl.users.create({
                     'email': user.email,
                     'username': self.format_username(user.login),
                     'name': user.fullname,
@@ -191,14 +192,14 @@ class ImportSession(object):
                 'description':  None if fork.description is None else fork.description[0:255],
                 'wiki_enabled': False
             })
-            fork_project = self.gitlab.projects.get(gl_fork.id)
+            fork_project = self.gl.projects.get(gl_fork.id)
             fork_project.create_fork_relation(gl_project.id)
 
             self.mirror(fork, gl_fork)
         return gl_project
 
     def create_group(self, project):
-        gitlab_group = self.gitlab.groups.create({
+        gitlab_group = self.gl.groups.create({
             'visibility': 'public',
             'name': project.title.replace('#', 'S'),
             'path': project.slug,
@@ -236,7 +237,7 @@ class ImportSession(object):
                         print('\t{} {} {} forks'.format(repository.project_repo.hashed_path,
                                                 'NO WIKI' if repository.wiki_repo is None else repository.wiki_repo.hashed_path,
                                                 len(repository.forks)))
-                        self.create_project(repository, self.gitlab.projects, namespace_id=gitlab_group.id)
+                        self.create_project(repository, self.gl.projects, namespace_id=gitlab_group.id)
             except Exception as ex:
                 print('ERROR: ' + repr(project) + str(ex))
                 unmigrated_projects.append((project, ex))
@@ -254,8 +255,8 @@ class ImportSession(object):
         self._remove_gl('groups')
     
     def remove_gitlab_users(self):
-        for obj in filter(lambda x: x.id > 1, self.gitlab.users.list(all=True)):
-            self.gitlab.users.delete(obj.id)
+        for obj in filter(lambda x: x.id > 1, self.gl.users.list(all=True)):
+            self.gl.users.delete(obj.id)
     
     def run(self, cleanup=False):
         self.create_users()
@@ -264,6 +265,19 @@ class ImportSession(object):
         self.migrate_projects()
 
     def _remove_gl(self, object_name):
-        glo = getattr(self.gitlab, object_name)
+        glo = getattr(self.gl, object_name)
+        for obj in glo.list(all=True):
+            glo.delete(obj.id)owner].token
+    
+    def _get_project_owner(self, project: gitlab.Project) -> gitlab.User:
+        if project.namespace['kind'] == 'user':
+            owner = self.gl.users.get(project.owner['id'])
+        else:# otherwise, project is owned by a group
+            group = self.gl.groups.get(project.namespace['id'])
+            owner = [self.gl.users.get(m.id) for m in group.members.list(access_level=gitlab.OWNER_ACCESS, all=True) if m.id > 1][0]
+        
+        return owner 
+    def _remove_gl(self, object_name):
+        glo = getattr(self.gl, object_name)
         for obj in glo.list(all=True):
             glo.delete(obj.id)
