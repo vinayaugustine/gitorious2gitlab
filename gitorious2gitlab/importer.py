@@ -216,11 +216,16 @@ class ImportSession(object):
         return gitlab_group
 
     def migrate_projects(self):
+        unmigrated_projects = []
+        
         for project in self.gitorious.query(gitorious.Project):
-            print(project)
+            try:
+                print(repr(project))
             repo_groups = list(RepositoryGroup.from_project(project))
-            
             if type(project.owner) is gitorious.User and len(repo_groups) == 1:
+                    print('\t{} {} {} forks'.format(repo_groups[0].project_repo.hashed_path,
+                        'NO WIKI' if repo_groups[0].wiki_repo is None else repo_groups[0].wiki_repo.hashed_path,
+                        len(repo_groups[0].forks)))
                 gitlab_user = self.users[project.owner]
                 self.create_project(repo_groups[0], gitlab_user.projects)
             else: # create a group
@@ -228,7 +233,15 @@ class ImportSession(object):
                 gitlab_group = self.create_group(project)
                 
                 for repository in repo_groups:
+                        print('\t{} {} {} forks'.format(repository.project_repo.hashed_path,
+                                                'NO WIKI' if repository.wiki_repo is None else repository.wiki_repo.hashed_path,
+                                                len(repository.forks)))
                     self.create_project(repository, self.gitlab.projects, namespace_id=gitlab_group.id)
+            except Exception as ex:
+                print('ERROR: ' + repr(project) + str(ex))
+                unmigrated_projects.append((project, ex))
+        
+        return unmigrated_projects
 
     def cleanup(self):
         self.remove_gitlab_projects()
