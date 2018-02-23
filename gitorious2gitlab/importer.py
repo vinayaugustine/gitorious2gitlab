@@ -16,14 +16,30 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class RepositoryGroup(namedtuple('ParsedRepos', 'project_repo, wiki_repo, forks')):
     @staticmethod
-    def from_project(gitorious_project):
+    def from_project(gitorious_project: gitorious.Project):
         project_repos = [r for r in gitorious_project.repositories if not r.name.endswith('-gitorious-wiki') and r.parent is None]
-        wiki_repos = dict((r.hashed_path[0:-15], r) for r in gitorious_project.repositories if r.name.endswith('-gitorious-wiki'))
+        wiki_repos = OrderedDict((r.hashed_path[0:-15], r) for r in gitorious_project.repositories if r.name.endswith('-gitorious-wiki'))
         forks = [r for r in gitorious_project.repositories if r.parent is not None]
+        
+        num_wikis = len(wiki_repos)
+        if num_wikis > 1:
+            print('{} has {} wikis!'.format(gitorious_project.slug, num_wikis))
+        
+        wiki_is_mapped = all(any(w==r.hashed_path for r in project_repos) for w in wiki_repos.keys())
+        
         for repo in project_repos:
-            yield RepositoryGroup(repo,
-                            wiki_repos[repo.hashed_path] if repo.hashed_path in wiki_repos else None,
-                            [f for f in forks if f.parent is repo])
+            selected_wiki = None
+            if wiki_is_mapped:
+                selected_wiki = wiki_repos.pop(repo.hashed_path) if repo.hashed_path in wiki_repos else None
+            elif len(wiki_repos) > 0:
+                (key, selected_wiki) = wiki_repos.popitem(last=False)
+            
+            if selected_wiki is not None:
+                num_wikis -= 1
+            
+            yield RepositoryGroup(repo, selected_wiki, [f for f in forks if f.parent is repo])
+        if num_wikis > 0:
+            print('{} wiki{}not migrated'.format(num_wikis, 's ' if num_wikis > 1 else ' '))
 
 def randomword(length):
     return ''.join(random.choice(string.ascii_letters) for i in range(length))
