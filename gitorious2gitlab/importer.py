@@ -208,7 +208,7 @@ class ImportSession(object):
     
     def remove_gitlab_users(self):
         for obj in filter(lambda x: x.id > 1, self.gitlab.users.list(all=True)):
-            self.gitlab.users.delete(obj)
+            self.gitlab.users.delete(obj.id)
     
     def _remove_gl(self, object_name):
         glo = getattr(self.gitlab, object_name)
