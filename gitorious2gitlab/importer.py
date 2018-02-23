@@ -14,6 +14,9 @@ import gitorious2gitlab.gitorious as gitorious
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+MigrationError = namedtuple('MigrationError', 'project, exception')
+MigrationResult = namedtuple('MigrationResult', 'migrated_project_count, unmigrated_projects')
+
 class Repository(object):
     def __init__(self, origin_url, local_path):
         self._origin_url = origin_url
@@ -219,6 +222,7 @@ class ImportSession(object):
     def migrate_projects(self):
         unmigrated_projects = []
         
+        migrated_projects_count = 0
         for project in self.gitorious.query(gitorious.Project):
             try:
                 print(repr(project))
@@ -238,11 +242,11 @@ class ImportSession(object):
                                                 'NO WIKI' if repository.wiki_repo is None else repository.wiki_repo.hashed_path,
                                                 len(repository.forks)))
                         self.create_project(repository, self.gl.projects, namespace_id=gitlab_group.id)
+                migrated_projects_count += 1
             except Exception as ex:
                 print('ERROR: ' + repr(project) + str(ex))
-                unmigrated_projects.append((project, ex))
-        
-        return unmigrated_projects
+                unmigrated_projects.append(MigrationError(project, ex))
+        return MigrationResult(migrated_projects_count, unmigrated_projects)
 
     def cleanup(self):
         self.remove_gitlab_projects()
@@ -262,7 +266,7 @@ class ImportSession(object):
         self.create_users()
         if cleanup:
             self.cleanup()
-        self.migrate_projects()
+        return self.migrate_projects()
 
     def _remove_gl(self, object_name):
         glo = getattr(self.gl, object_name)
