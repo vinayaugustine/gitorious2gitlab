@@ -156,7 +156,7 @@ class Repository(Base):
     wiki_permissions = Column(Integer)
 
     def clone_url(self, server_url):
-        return 'git://{}/{}.git'.format(server_url, self.hashed_path)
+        return 'git://{}/{}/{}.git'.format(server_url, self.project.slug, self.name)
 
     def __repr__(self):
         return 'Repository(path={}, name={}, project={})'.format(self.hashed_path, self.name, repr(self.project))
