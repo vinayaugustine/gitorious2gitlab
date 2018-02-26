@@ -14,6 +14,9 @@ import gitorious2gitlab.gitorious as gitorious
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+class UnmigratedWikiError(Exception):
+    pass
+
 MigrationError = namedtuple('MigrationError', 'project, exception')
 MigrationResult = namedtuple('MigrationResult', 'migrated_project_count, unmigrated_projects')
 
@@ -86,7 +89,7 @@ class RepositoryGroup(namedtuple('ParsedRepos', 'project_repo, wiki_repo, forks'
             
             yield RepositoryGroup(repo, selected_wiki, [f for f in forks if f.parent is repo])
         if num_wikis > 0:
-            print('{} wiki{}not migrated'.format(num_wikis, 's ' if num_wikis > 1 else ' '))
+            raise UnmigratedWikiError('{} wiki{}not migrated'.format(num_wikis, 's ' if num_wikis > 1 else ' '))
 
 def randomword(length):
     return ''.join(random.choice(string.ascii_letters) for i in range(length))
