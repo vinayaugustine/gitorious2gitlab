@@ -145,10 +145,9 @@ class ImportSession(object):
     
     def create_users(self):
         self.map_existing_users()
-        for user in self.users:
-            if self.users[user] is not None:
-                print('{} already exists as {}'.format(user.login, self.users[user].username))
-                continue
+        unmapped_users = [k for (k,v) in self.users.items() if v is None]
+        print('{} users already mapped'.format(len([k for (k,v) in self.users.items() if v is not None])))
+        for user in unmapped_users:
             try:
                 print(user)
                 self.users[user] = self.gl.users.create({
