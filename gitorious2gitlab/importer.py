@@ -192,8 +192,23 @@ class ImportSession(object):
             'wiki_enabled': repo_group.wiki_repo is not None,
             'tag_list': [t.name for t in repo_group.project_repo.project.tags]
         })
-        gl_project = gitlab_project_root.create(kwargs)
+        project = gitlab_project_root.create(kwargs)
+        gl_project = self.gl.projects.get(project.id)
 
+        i = 0
+        for committer in (c.committer for c in repo_group.project_repo.committerships):
+            owner = repo_group.project_repo.owner if type(repo_group.project_repo.owner) is gitorious.User else repo_group.project_repo.owner.admin
+
+            if type(committer) is gitorious.User and owner is not committer:
+                gl_project.members.create({
+                    'user_id': self.users[committer].id,
+                    'access_level': gitlab.DEVELOPER_ACCESS
+                })
+                i += 1
+
+        if i > 0:
+            print('\tAdded {} committers'.format(i))
+        
         # migrate the project repo
         self.mirror(self.make_local_path(gl_project),
                     repo_group.project_repo.clone_url(self.gitorious_url),

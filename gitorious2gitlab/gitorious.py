@@ -37,8 +37,6 @@ class User(Base):
     email = Column(String)
     fullname = Column(String)
 
-    groups = relationship('Group', secondary=group_memberships)
-
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
 
@@ -46,7 +44,7 @@ class User(Base):
         return 'User(login={})'.format(self.login)
 
     def __str__(self):
-        return '{} <{}>'.format(self.fullname, self.email)
+        return '{} <{}>'.format(self.fullname, self.email)    
 
 
 class Site(Base):
@@ -78,6 +76,7 @@ class Group(Base):
     def __repr__(self):
         return 'Group(name={}, admin={})'.format(self.name, repr(self.admin))
 
+User.groups = relationship('Group', secondary=group_memberships)
 User.owned_groups = relationship('Group', back_populates='admin')
 
 
@@ -144,6 +143,11 @@ class Repository(Base):
     owner_id = Column(Integer)
     owner_type = Column(String)
 
+    @property
+    def owner(self):
+        target = globals()[self.owner_type]
+        return object_session(self).query(target).filter(target.id == self.owner_id).one_or_none()
+
     parent_id = Column(Integer, ForeignKey('repositories.id'))
     children = relationship('Repository', backref=backref('parent', remote_side=[id]))
 
@@ -163,6 +167,22 @@ class Repository(Base):
 
 Project.repositories = relationship('Repository', back_populates='project')
 User.repositories = relationship('Repository', back_populates='user')
+
+class Committership(Base):
+    __tablename__ = 'committerships'
+    id = Column(Integer, primary_key=True)
+    committer_id = Column(Integer)
+    committer_type = Column(String)
+
+    @property
+    def committer(self):
+        target = globals()[self.committer_type]
+        return object_session(self).query(target).filter(target.id == self.committer_id).one_or_none()
+
+    repository_id = Column(Integer, ForeignKey('repositories.id'))
+    repository = relationship('Repository', back_populates='committerships')
+
+Repository.committerships = relationship('Committership', back_populates='repository')
 
 
 class SshKey(Base):
