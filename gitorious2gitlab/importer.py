@@ -14,7 +14,7 @@ import gitorious2gitlab.gitorious as gitorious
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-class UnmigratedWikiError(Exception):
+class UnmigratedRepositoryError(Exception):
     pass
 
 MigrationError = namedtuple('MigrationError', 'project, exception')
@@ -71,25 +71,37 @@ class RepositoryGroup(namedtuple('ParsedRepos', 'project_repo, wiki_repo, forks'
         wiki_repos = OrderedDict((r.hashed_path[0:-15], r) for r in gitorious_project.repositories if r.name.endswith('-gitorious-wiki'))
         forks = [r for r in gitorious_project.repositories if r.parent is not None]
         
-        num_wikis = len(wiki_repos)
-        if num_wikis > 1:
-            print('{} has {} wikis!'.format(gitorious_project.slug, num_wikis))
-        
-        wiki_is_mapped = all(any(w==r.hashed_path for r in project_repos) for w in wiki_repos.keys())
-        
-        for repo in project_repos:
-            selected_wiki = None
-            if wiki_is_mapped:
-                selected_wiki = wiki_repos.pop(repo.hashed_path) if repo.hashed_path in wiki_repos else None
-            elif len(wiki_repos) > 0:
-                (key, selected_wiki) = wiki_repos.popitem(last=False)
+        if len(project_repos) > 0:
+            num_wikis = len(wiki_repos)
+            if num_wikis > 1:
+                print('{} has {} wikis!'.format(gitorious_project.slug, num_wikis))
             
-            if selected_wiki is not None:
-                num_wikis -= 1
+            wiki_is_mapped = all(any(w==r.hashed_path for r in project_repos) for w in wiki_repos.keys())
             
-            yield RepositoryGroup(repo, selected_wiki, [f for f in forks if f.parent is repo])
-        if num_wikis > 0:
-            raise UnmigratedWikiError('{} wiki{}not migrated'.format(num_wikis, 's ' if num_wikis > 1 else ' '))
+            for repo in project_repos:
+                selected_wiki = None
+                if wiki_is_mapped:
+                    selected_wiki = wiki_repos.pop(repo.hashed_path) if repo.hashed_path in wiki_repos else None
+                elif len(wiki_repos) > 0:
+                    (key, selected_wiki) = wiki_repos.popitem(last=False)
+                
+                if selected_wiki is not None:
+                    num_wikis -= 1
+                
+                yield RepositoryGroup(repo, selected_wiki, [f for f in forks if f.parent is repo])
+            if num_wikis > 0:
+                raise UnmigratedRepositoryError('{} wiki{}not migrated'.format(num_wikis, 's ' if num_wikis > 1 else ' '))
+        elif len(forks) > 0:
+            # this means that there are no project repos, but forks exist
+            # The most likely explanation is that the original repository was deleted, but the forks remained
+            raise UnmigratedRepositoryError('{} forks{}not migrated'.format(len(forks), 's ' if len(forks) > 0 else ' '))
+        elif len(wiki_repos) > 0:
+            # we have a wiki, no project repos, and no forks
+            # the most likely explanation is that the project exists, but the initial repositories were deleted
+            for repo in wiki_repos.values():
+                yield RepositoryGroup(repo, None, [])
+            
+
 
 def randomword(length):
     return ''.join(random.choice(string.ascii_letters) for i in range(length))
