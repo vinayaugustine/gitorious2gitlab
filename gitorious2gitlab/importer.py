@@ -221,6 +221,11 @@ class ImportSession(object):
                     'user_id': self.users[member].id,
                     'access_level': gitlab.OWNER_ACCESS if member is owner.admin else gitlab.DEVELOPER_ACCESS
                 })
+        else: # owner is a user
+            gitlab_group.members.create({
+                'user_id': self.users[owner].id,
+                'access_level': gitlab.OWNER_ACCESS
+            })
         
         return gitlab_group
 
